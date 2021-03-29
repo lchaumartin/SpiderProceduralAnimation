@@ -5,12 +5,13 @@ using UnityEngine;
 public class SpiderProceduralAnimation : MonoBehaviour
 {
     public Transform[] legTargets;
-    public float stepSize = 1f;
-    public int smoothness = 1;
-    public float stepHeight = 0.1f;
+    public float stepSize = 0.15f;
+    public int smoothness = 8;
+    public float stepHeight = 0.15f;
+    public float sphereCastRadius = 0.125f;
     public bool bodyOrientation = true;
 
-    private float raycastRange = 1f;
+    public float raycastRange = 1.5f;
     private Vector3[] defaultLegPositions;
     private Vector3[] lastLegPositions;
     private Vector3 lastBodyUp;
@@ -23,13 +24,14 @@ public class SpiderProceduralAnimation : MonoBehaviour
 
     private float velocityMultiplier = 15f;
 
-    static Vector3[] MatchToSurfaceFromAbove(Vector3 point, float halfRange, Vector3 up)
+    Vector3[] MatchToSurfaceFromAbove(Vector3 point, float halfRange, Vector3 up)
     {
         Vector3[] res = new Vector3[2];
+        res[1] = Vector3.zero;
         RaycastHit hit;
-        Ray ray = new Ray(point + halfRange * up, - up);
-        
-        if (Physics.Raycast(ray, out hit, 2f * halfRange))
+        Ray ray = new Ray(point + halfRange * up / 2f, - up);
+
+        if (Physics.SphereCast(ray, sphereCastRadius, out hit, 2f * halfRange))
         {
             res[0] = hit.point;
             res[1] = hit.normal;
@@ -105,9 +107,20 @@ public class SpiderProceduralAnimation : MonoBehaviour
         if (indexToMove != -1 && !legMoving[0])
         {
             Vector3 targetPoint = desiredPositions[indexToMove] + Mathf.Clamp(velocity.magnitude * velocityMultiplier, 0.0f, 1.5f) * (desiredPositions[indexToMove] - legTargets[indexToMove].position) + velocity * velocityMultiplier;
-            Vector3[] positionAndNormal = MatchToSurfaceFromAbove(targetPoint, raycastRange, transform.up);
+
+            Vector3[] positionAndNormalFwd = MatchToSurfaceFromAbove(targetPoint + velocity * velocityMultiplier, raycastRange, (transform.parent.up - velocity * 100).normalized);
+            Vector3[] positionAndNormalBwd = MatchToSurfaceFromAbove(targetPoint + velocity * velocityMultiplier, raycastRange*(1f + velocity.magnitude), (transform.parent.up + velocity * 75).normalized);
+            
             legMoving[0] = true;
-            StartCoroutine(PerformStep(indexToMove, positionAndNormal[0]));
+            
+            if (positionAndNormalFwd[1] == Vector3.zero)
+            {
+                StartCoroutine(PerformStep(indexToMove, positionAndNormalBwd[0]));
+            }
+            else
+            {
+                StartCoroutine(PerformStep(indexToMove, positionAndNormalFwd[0]));
+            }
         }
 
         lastBodyPos = transform.position;
@@ -118,7 +131,8 @@ public class SpiderProceduralAnimation : MonoBehaviour
             Vector3 normal = Vector3.Cross(v1, v2).normalized;
             Vector3 up = Vector3.Lerp(lastBodyUp, normal, 1f / (float)(smoothness + 1));
             transform.up = up;
-            lastBodyUp = up;
+            transform.rotation = Quaternion.LookRotation(transform.parent.forward, up);
+            lastBodyUp = transform.up;
         }
     }
 
